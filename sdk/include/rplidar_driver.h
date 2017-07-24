@@ -49,6 +49,7 @@ public:
 
     enum {
         DRIVER_TYPE_SERIALPORT = 0x0,
+        DRIVER_TYPE_FORWARDING,
     };
 public:
     /// Create an RPLIDAR Driver Instance

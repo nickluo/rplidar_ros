@@ -38,6 +38,7 @@
 #include "hal/locker.h"
 #include "hal/event.h"
 #include "rplidar_driver_serial.h"
+#include "forwarding_serial.h"
 
 #ifndef min
 #define min(a,b)            (((a) < (b)) ? (a) : (b))
@@ -51,7 +52,9 @@ RPlidarDriver * RPlidarDriver::CreateDriver(_u32 drivertype)
 {
     switch (drivertype) {
     case DRIVER_TYPE_SERIALPORT:
-        return new RPlidarDriverSerialImpl();
+        return new RPlidarDriverSerialImpl(false);
+    case DRIVER_TYPE_FORWARDING:
+        return new RPlidarDriverSerialImpl(true);
     default:
         return NULL;
     }
@@ -67,12 +70,15 @@ void RPlidarDriver::DisposeDriver(RPlidarDriver * drv)
 
 // Serial Driver Impl
 
-RPlidarDriverSerialImpl::RPlidarDriverSerialImpl() 
+RPlidarDriverSerialImpl::RPlidarDriverSerialImpl(bool forwarding) 
     : _isConnected(false)
     , _isScanning(false)
     , _isSupportingMotorCtrl(false)
 {
-    _rxtx = rp::hal::serial_rxtx::CreateRxTx();
+    if (forwarding)
+        _rxtx = new rp::arch::net::forwarding_serial;
+    else
+        _rxtx = rp::hal::serial_rxtx::CreateRxTx();
     _cached_scan_node_count = 0;
     _cached_sampleduration_std = LEGACY_SAMPLE_DURATION;
     _cached_sampleduration_express = LEGACY_SAMPLE_DURATION;
@@ -83,7 +89,8 @@ RPlidarDriverSerialImpl::~RPlidarDriverSerialImpl()
     // force disconnection
     disconnect();
 
-    rp::hal::serial_rxtx::ReleaseRxTx(_rxtx);
+    if (_rxtx)
+        delete _rxtx;
 }
 
 u_result RPlidarDriverSerialImpl::connect(const char * port_path, _u32 baudrate, _u32 flag)

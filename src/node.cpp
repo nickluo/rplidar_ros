@@ -189,6 +189,9 @@ int main(int argc, char * argv[]) {
     bool inverted = false;
     bool angle_compensate = true;
 
+    ros::AsyncSpinner spinner(4);
+    spinner.start();
+
     ros::NodeHandle nh;
     ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1000);
     ros::NodeHandle nh_private("~");
@@ -199,12 +202,13 @@ int main(int argc, char * argv[]) {
     nh_private.param<bool>("angle_compensate", angle_compensate, true);
 
     printf("RPLIDAR running on ROS package rplidar_ros\n"
-           "SDK Version: "RPLIDAR_SDK_VERSION"\n");
+           "SDK Version: ""RPLIDAR_SDK_VERSION""\n");
 
     u_result     op_result;
 
     // create the driver instance
-    drv = RPlidarDriver::CreateDriver(RPlidarDriver::DRIVER_TYPE_SERIALPORT);
+    //DRIVER_TYPE_SERIALPORT
+    drv = RPlidarDriver::CreateDriver(RPlidarDriver::DRIVER_TYPE_FORWARDING);
     
     if (!drv) {
         fprintf(stderr, "Create Driver fail, exit\n");
@@ -307,12 +311,13 @@ int main(int argc, char * argv[]) {
             }
         }
 
-        ros::spinOnce();
+        //ros::spinOnce();
     }
-
     // done!
     drv->stop();
     drv->stopMotor();
     RPlidarDriver::DisposeDriver(drv);
+    spinner.stop();
+    ros::waitForShutdown();
     return 0;
 }

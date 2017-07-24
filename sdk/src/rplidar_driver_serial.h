@@ -48,7 +48,7 @@ public:
         LEGACY_SAMPLE_DURATION = 476,
     };
 
-    RPlidarDriverSerialImpl();
+    explicit RPlidarDriverSerialImpl(bool forwarding);
     virtual ~RPlidarDriverSerialImpl();
 
 public:
