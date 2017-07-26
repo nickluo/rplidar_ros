@@ -188,6 +188,7 @@ int main(int argc, char * argv[]) {
     std::string frame_id;
     bool inverted = false;
     bool angle_compensate = true;
+    bool comm_forwarding = false;
 
     ros::AsyncSpinner spinner(4);
     spinner.start();
@@ -200,6 +201,7 @@ int main(int argc, char * argv[]) {
     nh_private.param<std::string>("frame_id", frame_id, "laser_frame");
     nh_private.param<bool>("inverted", inverted, false);
     nh_private.param<bool>("angle_compensate", angle_compensate, true);
+    nh_private.param<bool>("comm_forwarding", comm_forwarding, false);
 
     printf("RPLIDAR running on ROS package rplidar_ros\n"
            "SDK Version: ""RPLIDAR_SDK_VERSION""\n");
@@ -208,7 +210,9 @@ int main(int argc, char * argv[]) {
 
     // create the driver instance
     //DRIVER_TYPE_SERIALPORT
-    drv = RPlidarDriver::CreateDriver(RPlidarDriver::DRIVER_TYPE_FORWARDING);
+    drv = RPlidarDriver::CreateDriver(comm_forwarding?
+        RPlidarDriver::DRIVER_TYPE_FORWARDING :
+        RPlidarDriver::DRIVER_TYPE_SERIALPORT);
     
     if (!drv) {
         fprintf(stderr, "Create Driver fail, exit\n");
