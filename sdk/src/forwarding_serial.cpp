@@ -3,10 +3,19 @@
 namespace rp { namespace arch { namespace net {
 
 	forwarding_serial::forwarding_serial()
+        : queue(0)
 	{
-		sender = n.advertise<std_msgs::UInt8MultiArray>("rplidar_sender", 32);
+		sender = n.advertise<std_msgs::UInt8MultiArray>("/rplidar_sender", 32);
 		receiver = n.subscribe("rplidar_receiver", 32, 
 			&forwarding_serial::arrayCallback, this);
+
+        while(sender.getNumSubscribers()==0 || receiver.getNumPublishers()==0)
+        {
+            if (!ros::ok())
+                break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
 	}
 
 	forwarding_serial::~forwarding_serial()
@@ -16,10 +25,9 @@ namespace rp { namespace arch { namespace net {
 
 	void forwarding_serial::arrayCallback(const std_msgs::UInt8MultiArray::ConstPtr& ptr)
 	{
-		std::unique_lock<std::mutex> lck(mtx);
-		std::memcpy(rx_buffer, ptr->data.data(), ptr->data.size());
-		required_rx_cnt = ptr->data.size();
-		cv.notify_one();
+        std::vector<_u8> v(ptr->data.size());
+        std::memcpy(v.data(), ptr->data.data(), ptr->data.size());
+        queue.Push(std::move(v));
 	}
 
 	void forwarding_serial::flush(_u32 flags)
@@ -50,21 +58,27 @@ namespace rp { namespace arch { namespace net {
     {
     	if (!isOpened())
     		return ANS_DEV_ERR;
-    	std::unique_lock<std::mutex> lck(mtx);
-  		if (cv.wait_for(lck, std::chrono::milliseconds(timeout),
-  			[&](){ return required_rx_cnt>0; }))
-  		{
-  			if (returned_size)
-  				*returned_size = required_rx_cnt;
-  			return ANS_OK;
-  		}
-    	return ANS_TIMEOUT;
+        std::vector<_u8> *pv = queue.Peek(timeout);
+        if (pv)
+        {
+            if (returned_size)
+                *returned_size = pv->size();
+            return ANS_OK;
+        }
+        if (returned_size)
+            *returned_size = 0;
+        return ANS_TIMEOUT;
     }
 
     int forwarding_serial::senddata(const unsigned char * data, size_t size)
     {
-    	std::memcpy(tx_buffer+required_tx_cnt, data, size);
-    	required_tx_cnt += size;
+        std_msgs::UInt8MultiArray array;
+        array.data.resize(size);
+        std::memcpy(array.data.data(), data, size);
+        //Publish array
+        // if (sender.getNumSubscribers()==0)
+        //     std::cout<<"publish fail "<<std::endl;
+        sender.publish(array);
     	return size;
     }
     
@@ -72,23 +86,14 @@ namespace rp { namespace arch { namespace net {
     {
     	if (!isOpened()) 
     		return 0;
-    	std::unique_lock<std::mutex> lck(mtx);
-    	if (required_tx_cnt<size)
-    		return -1;
-    	std::memcpy(data, rx_buffer, required_tx_cnt);
-    	required_tx_cnt = 0;
+        std::vector<_u8> v;
+        if (queue.Pop_NoWait(v))
+            std::memcpy(data, v.data(), size);
     	return 0;
     }
 
     int forwarding_serial::waitforsent(_u32 timeout, size_t * returned_size)
     {
-    	std_msgs::UInt8MultiArray array;
-    	array.data.resize(required_tx_cnt);
-    	std::memcpy(array.data.data(), tx_buffer, required_tx_cnt);
-    	//Publish array
-		sender.publish(array);
-    	if (returned_size)
-    		*returned_size = required_tx_cnt;
     	return 0;
     }
 

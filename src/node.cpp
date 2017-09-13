@@ -190,9 +190,6 @@ int main(int argc, char * argv[]) {
     bool angle_compensate = true;
     bool comm_forwarding = false;
 
-    ros::AsyncSpinner spinner(4);
-    spinner.start();
-
     ros::NodeHandle nh;
     ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1000);
     ros::NodeHandle nh_private("~");
@@ -204,12 +201,11 @@ int main(int argc, char * argv[]) {
     nh_private.param<bool>("comm_forwarding", comm_forwarding, false);
 
     printf("RPLIDAR running on ROS package rplidar_ros\n"
-           "SDK Version: ""RPLIDAR_SDK_VERSION""\n");
+           "SDK Version: " RPLIDAR_SDK_VERSION "\n");
 
     u_result     op_result;
 
     // create the driver instance
-    //DRIVER_TYPE_SERIALPORT
     drv = RPlidarDriver::CreateDriver(comm_forwarding?
         RPlidarDriver::DRIVER_TYPE_FORWARDING :
         RPlidarDriver::DRIVER_TYPE_SERIALPORT);
@@ -218,6 +214,9 @@ int main(int argc, char * argv[]) {
         fprintf(stderr, "Create Driver fail, exit\n");
         return -2;
     }
+
+    ros::AsyncSpinner spinner(4);
+    spinner.start();
 
     // make connection...
     if (IS_FAIL(drv->connect(serial_port.c_str(), (_u32)serial_baudrate))) {

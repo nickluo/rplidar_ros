@@ -15,6 +15,8 @@ using size_t = std::size_t;
 #include "std_msgs/MultiArrayDimension.h"
 #include "std_msgs/UInt8MultiArray.h"
 
+#include "ConcurrentQueue.h"
+
 namespace rp { namespace arch { namespace net {
 
 class forwarding_serial : public rp::hal::serial_rxtx
@@ -46,12 +48,10 @@ protected:
 	size_t required_tx_cnt = 0;
 	size_t required_rx_cnt = 0;
 	unsigned char tx_buffer[256];
-	unsigned char rx_buffer[256];
 	ros::NodeHandle n;
 	ros::Publisher sender;
 	ros::Subscriber receiver;
-	std::mutex mtx;
-	std::condition_variable cv;
+	ConcurrentQueue<std::vector<_u8>> queue;
 
 	void arrayCallback(const std_msgs::UInt8MultiArray::ConstPtr& ptr);
 };

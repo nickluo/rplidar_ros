@@ -74,6 +74,7 @@ RPlidarDriverSerialImpl::RPlidarDriverSerialImpl(bool forwarding)
     : _isConnected(false)
     , _isScanning(false)
     , _isSupportingMotorCtrl(false)
+    , _forwarding(forwarding)
 {
     if (forwarding)
         _rxtx = new rp::arch::net::forwarding_serial;
@@ -197,7 +198,6 @@ u_result RPlidarDriverSerialImpl::getDeviceInfo(rplidar_response_device_info_t &
         if (IS_FAIL(ans = _sendCommand(RPLIDAR_CMD_GET_DEVICE_INFO))) {
             return ans;
         }
-
         rplidar_ans_header_t response_header;
         if (IS_FAIL(ans = _waitResponseHeader(&response_header, timeout))) {
             return ans;
@@ -298,6 +298,7 @@ u_result RPlidarDriverSerialImpl::checkExpressScanSupported(bool & support, _u32
 
 u_result RPlidarDriverSerialImpl::startScanExpress(bool fixedAngle, _u32 timeout)
 {
+
     u_result ans;
     if (!isConnected()) return RESULT_OPERATION_FAIL;
     if (_isScanning) return RESULT_ALREADY_DONE;
@@ -839,45 +840,66 @@ u_result RPlidarDriverSerialImpl::_waitResponseHeader(rplidar_ans_header_t * hea
     _u8  *headerBuffer = reinterpret_cast<_u8 *>(header);
     _u32 waitTime;
 
-    while ((waitTime=getms() - startTs) <= timeout) {
-        size_t remainSize = sizeof(rplidar_ans_header_t) - recvPos;
+    if (_forwarding)
+    {
         size_t recvSize;
-        
-        int ans = _rxtx->waitfordata(remainSize, timeout - waitTime, &recvSize);
-        if (ans == rp::hal::serial_rxtx::ANS_DEV_ERR) 
-            return RESULT_OPERATION_FAIL;
-        else if (ans == rp::hal::serial_rxtx::ANS_TIMEOUT)
-            return RESULT_OPERATION_TIMEOUT;
-        
-        if(recvSize > remainSize) recvSize = remainSize;
-        
-        _rxtx->recvdata(recvBuffer, recvSize);
-
-        for (size_t pos = 0; pos < recvSize; ++pos) {
-            _u8 currentByte = recvBuffer[pos];
-            switch (recvPos) {
-            case 0:
-                if (currentByte != RPLIDAR_ANS_SYNC_BYTE1) {
-                   continue;
-                }
-                
-                break;
-            case 1:
-                if (currentByte != RPLIDAR_ANS_SYNC_BYTE2) {
-                    recvPos = 0;
-                    continue;
-                }
-                break;
+        //int count = 0;
+        do {
+            //std::cout<<"waitfordata "<<++count<<std::endl;
+            int ans = _rxtx->waitfordata(sizeof(rplidar_ans_header_t), timeout, &recvSize);
+            if (ans == rp::hal::serial_rxtx::ANS_TIMEOUT)
+            {
+                //std::cout<<"RESULT_OPERATION_TIMEOUT"<<std::endl;
+                return RESULT_OPERATION_TIMEOUT;
             }
-            headerBuffer[recvPos++] = currentByte;
+            _rxtx->recvdata(headerBuffer, recvSize);
+            //std::cout<<"recvSize: "<<recvSize<<std::endl;
+        } while (sizeof(rplidar_ans_header_t)!=recvSize || 
+               headerBuffer[0]!= RPLIDAR_ANS_SYNC_BYTE1 ||
+               headerBuffer[1]!= RPLIDAR_ANS_SYNC_BYTE2);
+        return RESULT_OK;
+    }
+    else
+    {
+        while ((waitTime=getms() - startTs) <= timeout) {
+            size_t remainSize = sizeof(rplidar_ans_header_t) - recvPos;
+            size_t recvSize;
+            
+            int ans = _rxtx->waitfordata(remainSize, timeout - waitTime, &recvSize);
+            if (ans == rp::hal::serial_rxtx::ANS_DEV_ERR) 
+                return RESULT_OPERATION_FAIL;
+            else if (ans == rp::hal::serial_rxtx::ANS_TIMEOUT)
+                return RESULT_OPERATION_TIMEOUT;
+            
+            if(recvSize > remainSize) recvSize = remainSize;
+            
+            _rxtx->recvdata(recvBuffer, recvSize);
 
-            if (recvPos == sizeof(rplidar_ans_header_t)) {
-                return RESULT_OK;
+            for (size_t pos = 0; pos < recvSize; ++pos) {
+                _u8 currentByte = recvBuffer[pos];
+                switch (recvPos) {
+                case 0:
+                    if (currentByte != RPLIDAR_ANS_SYNC_BYTE1) {
+                       continue;
+                    }
+                    
+                    break;
+                case 1:
+                    if (currentByte != RPLIDAR_ANS_SYNC_BYTE2) {
+                        recvPos = 0;
+                        continue;
+                    }
+                    break;
+                }
+                headerBuffer[recvPos++] = currentByte;
+
+                if (recvPos == sizeof(rplidar_ans_header_t)) {
+                    return RESULT_OK;
+                }
             }
         }
+        return RESULT_OPERATION_TIMEOUT;
     }
-
-    return RESULT_OPERATION_TIMEOUT;
 }
 
 
@@ -890,6 +912,7 @@ void RPlidarDriverSerialImpl::_disableDataGrabbing()
 
 u_result RPlidarDriverSerialImpl::getSampleDuration_uS(rplidar_response_sample_rate_t & rateInfo, _u32 timeout)
 {  
+
     if (!isConnected()) return RESULT_OPERATION_FAIL;
     
     _disableDataGrabbing();
@@ -949,6 +972,13 @@ u_result RPlidarDriverSerialImpl::checkMotorCtrlSupport(bool & support, _u32 tim
 
     {
         rp::hal::AutoLocker l(_lock);
+
+        //Pass test when forwarding
+        if (dynamic_cast<rp::arch::net::forwarding_serial *>(_rxtx)!=NULL)
+        {
+            support = false;
+            return RESULT_OK;
+        }
 
         rplidar_payload_acc_board_flag_t flag;
         flag.reserved = 0;
@@ -1023,9 +1053,18 @@ u_result RPlidarDriverSerialImpl::stopMotor()
         delay(500);
         return RESULT_OK;
     } else { // RPLIDAR A1
+        //std::cout<<"No SupportingMotorCtrl"<<std::endl;
         rp::hal::AutoLocker l(_lock);
-        _rxtx->setDTR();
-        delay(500);
+        if (_forwarding)
+        {
+            //std::cout<<"_sendCommand(RPLIDAR_CMD_STOP)"<<std::endl;
+            _sendCommand(RPLIDAR_CMD_STOP);
+        }
+        else
+        {
+            _rxtx->setDTR();
+            delay(500);
+        }
         return RESULT_OK;
     }
 }

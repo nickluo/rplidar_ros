@@ -93,6 +93,7 @@ protected:
     bool     _isConnected;
     bool     _isScanning;
     bool     _isSupportingMotorCtrl;
+    bool     _forwarding;
 
 	rp::hal::Locker         _lock;
     rp::hal::Event          _dataEvt;
