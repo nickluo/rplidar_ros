@@ -285,7 +285,7 @@ u_result RPlidarDriverSerialImpl::checkExpressScanSupported(bool & support, _u32
 
     if (IS_FAIL(ans)) return ans;
 
-    if (devinfo.firmware_version >= ((0x1<<8) | 21)) {
+    if (devinfo.firmware_version >= ((0x1<<8) | 17)) {
         support = true;
         rplidar_response_sample_rate_t sample_rate;
         getSampleDuration_uS(sample_rate);
