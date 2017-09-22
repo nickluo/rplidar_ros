@@ -114,7 +114,9 @@ u_result RPlidarDriverSerialImpl::connect(const char * port_path, _u32 baudrate,
     _isConnected = true;
 
     if (_forwarding)
-        stop();
+    {
+        stop();   
+    }
 
     checkMotorCtrlSupport(_isSupportingMotorCtrl);
     stopMotor();
@@ -195,12 +197,14 @@ u_result RPlidarDriverSerialImpl::getDeviceInfo(rplidar_response_device_info_t &
 
     _disableDataGrabbing();
 
+
     {
         rp::hal::AutoLocker l(_lock);
 
         if (IS_FAIL(ans = _sendCommand(RPLIDAR_CMD_GET_DEVICE_INFO))) {
             return ans;
         }
+ 
         rplidar_ans_header_t response_header;
         if (IS_FAIL(ans = _waitResponseHeader(&response_header, timeout))) {
             return ans;
@@ -374,6 +378,12 @@ u_result RPlidarDriverSerialImpl::stop(_u32 timeout)
         if (IS_FAIL(ans = _sendCommand(RPLIDAR_CMD_STOP))) {
             return ans;
         }
+        if (_forwarding)
+        {
+            delay(100);
+            _rxtx->flush(0);
+        }
+
     }
 
     return RESULT_OK;
@@ -848,15 +858,15 @@ u_result RPlidarDriverSerialImpl::_waitResponseHeader(rplidar_ans_header_t * hea
         size_t recvSize;
         //int count = 0;
         do {
-            //std::cout<<"waitfordata "<<++count<<std::endl;
+           
             int ans = _rxtx->waitfordata(sizeof(rplidar_ans_header_t), timeout, &recvSize);
             if (ans == rp::hal::serial_rxtx::ANS_TIMEOUT)
             {
-                //std::cout<<"RESULT_OPERATION_TIMEOUT"<<std::endl;
+                
                 return RESULT_OPERATION_TIMEOUT;
             }
             _rxtx->recvdata(headerBuffer, recvSize);
-            //std::cout<<"recvSize: "<<recvSize<<std::endl;
+           
         } while (sizeof(rplidar_ans_header_t)!=recvSize || 
                headerBuffer[0]!= RPLIDAR_ANS_SYNC_BYTE1 ||
                headerBuffer[1]!= RPLIDAR_ANS_SYNC_BYTE2);
@@ -1056,12 +1066,14 @@ u_result RPlidarDriverSerialImpl::stopMotor()
         delay(500);
         return RESULT_OK;
     } else { // RPLIDAR A1
-        //std::cout<<"No SupportingMotorCtrl"<<std::endl;
+     
         rp::hal::AutoLocker l(_lock);
         if (_forwarding)
         {
-            //std::cout<<"_sendCommand(RPLIDAR_CMD_STOP)"<<std::endl;
+            
             _sendCommand(RPLIDAR_CMD_STOP);
+            delay(100);
+            _rxtx->flush(0);
         }
         else
         {

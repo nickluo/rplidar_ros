@@ -94,7 +94,8 @@ template <class T>
 void ConcurrentQueue<T>::Clear()
 {
     std::lock_guard<std::mutex> lk(mtx);
-	queue.clear();
+    std::queue<T> q;
+	queue.swap(q);
 }
 
 template <class T>

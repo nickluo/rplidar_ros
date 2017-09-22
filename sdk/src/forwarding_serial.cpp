@@ -33,6 +33,7 @@ namespace rp { namespace arch { namespace net {
 	void forwarding_serial::flush(_u32 flags)
 	{
 		(void)flags;
+        queue.Clear();
 	}
 
     bool forwarding_serial::bind(const char * portname, _u32 baudrate, _u32 flags)

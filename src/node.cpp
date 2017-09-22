@@ -226,6 +226,7 @@ int main(int argc, char * argv[]) {
         return -1;
     }
 
+
     // get rplidar device info
     if (!getRPLIDARDeviceInfo(drv)) {
         return -1;
